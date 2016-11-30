@@ -5,7 +5,7 @@ import com.alibaba.datax.common.util.Configuration;
 import com.alibaba.datax.plugin.reader.mongodbreader.KeyConstant;
 import com.alibaba.datax.plugin.reader.mongodbreader.MongoDBReaderErrorCode;
 import com.google.common.base.Strings;
-import com.mongodb.*;
+import com.mongodb.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import org.bson.BsonDocument;
@@ -16,7 +16,7 @@ import java.util.List;
 public class CollectionSplitUtil {
 
     public static List<Configuration> doSplit(
-            Configuration originalSliceConfig,int adviceNumber,MongoClient mongoClient) {
+            Configuration originalSliceConfig, int adviceNumber, MongoClient mongoClient) {
 
         List<Configuration> confList = new ArrayList<Configuration>();
 
@@ -24,7 +24,7 @@ public class CollectionSplitUtil {
 
         String collectionName = originalSliceConfig.getString(KeyConstant.MONGO_COLLECTION_NAME);
 
-        if(Strings.isNullOrEmpty(dbName) || Strings.isNullOrEmpty(collectionName) || mongoClient == null) {
+        if (Strings.isNullOrEmpty(dbName) || Strings.isNullOrEmpty(collectionName) || mongoClient == null) {
             throw DataXException.asDataXException(MongoDBReaderErrorCode.ILLEGAL_VALUE,
                     MongoDBReaderErrorCode.ILLEGAL_VALUE.getDescription());
         }
@@ -35,10 +35,11 @@ public class CollectionSplitUtil {
         MongoCollection collection = db.getCollection(collectionName);
 
         List<Entry> countInterval = doSplitInterval(adviceNumber, collection, query);
-        for(Entry interval : countInterval) {
+        for (Entry interval : countInterval) {
             Configuration conf = originalSliceConfig.clone();
-            conf.set(KeyConstant.SKIP_COUNT,interval.interval);
-            conf.set(KeyConstant.BATCH_SIZE,interval.batchSize);
+            conf.set(KeyConstant.SKIP_COUNT, interval.skipCount);
+            conf.set(KeyConstant.LIMIT_SIZE, interval.limitSize);
+            conf.set(KeyConstant.TASK_CNT, adviceNumber);
             confList.add(conf);
         }
         return confList;
@@ -54,23 +55,23 @@ public class CollectionSplitUtil {
         } else {
             totalCount = collection.count();
         }
-        if(totalCount < 0) {
+        if (totalCount < 0) {
             return intervalCountList;
         }
         // 100 6 => 16 mod 4
-        long batchSize = totalCount/adviceNumber;
-        for(int i = 0; i < adviceNumber; i++) {
+        long batchSize = totalCount / adviceNumber;
+        for (int i = 0; i < adviceNumber; i++) {
             Entry entry = new Entry();
             /**
              * 这个判断确认不会丢失最后一页数据，
              * 因为 totalCount/adviceNumber 不整除时，如果不做判断会丢失最后一页
              */
-            if(i == (adviceNumber - 1)) {
-                entry.batchSize = batchSize + adviceNumber;
+            if (i == (adviceNumber - 1)) {
+                entry.limitSize = batchSize + (totalCount % adviceNumber);
             } else {
-                entry.batchSize = batchSize;
+                entry.limitSize = batchSize;
             }
-            entry.interval = batchSize * i;
+            entry.skipCount = batchSize * i;
             intervalCountList.add(entry);
         }
         return intervalCountList;
@@ -79,6 +80,6 @@ public class CollectionSplitUtil {
 }
 
 class Entry {
-    Long interval;
-    Long batchSize;
+    Long skipCount;
+    Long limitSize;
 }
