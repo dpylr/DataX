@@ -128,9 +128,11 @@ public class MongoDBReader extends Reader {
                             arr_str = arr_str.substring(0, arr_str.length()-1) + "]";
                             record.addColumn(new StringColumn(arr_str));
                         }
+                    } else if (tempCol instanceof Document) {
+                        record.addColumn(new StringColumn(((Document) tempCol).toJson()));
                     } else
                     {
-                        record.addColumn(new StringColumn((String) tempCol));
+                        record.addColumn(new StringColumn(tempCol.toString()));
                     }
                 }
                 recordSender.sendToWriter(record);
